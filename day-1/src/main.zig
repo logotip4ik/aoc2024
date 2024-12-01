@@ -68,17 +68,29 @@ pub fn main() !void {
         );
     }
 
-    var listOneIter = SmallestIter.init(&listOne.items);
-    var listTwoIter = SmallestIter.init(&listTwo.items);
-    var sum: u32 = 0;
+    // PART 1
+    // var listOneIter = SmallestIter.init(&listOne.items);
+    // var listTwoIter = SmallestIter.init(&listTwo.items);
+    // var sum: u32 = 0;
+    //
+    // for (0..listOne.items.len) |_| {
+    //     const smallestInFirstList = listOneIter.next().?;
+    //     const smallestInSecondList = listTwoIter.next().?;
+    //
+    //     const dist = if (smallestInFirstList < smallestInSecondList) smallestInSecondList - smallestInFirstList else smallestInFirstList - smallestInSecondList;
+    //
+    //     sum += dist;
+    // }
+    //
+    // print("{}\n", .{sum});
 
-    for (0..listOne.items.len) |_| {
-        const smallestInFirstList = listOneIter.next().?;
-        const smallestInSecondList = listTwoIter.next().?;
+    var sum: u64 = 0;
+    for (listOne.items) |item| {
+        const viewed = mem.count(u32, listTwo.items, &[1]u32{item});
 
-        const dist = if (smallestInFirstList < smallestInSecondList) smallestInSecondList - smallestInFirstList else smallestInFirstList - smallestInSecondList;
+        const simularity: u64 = viewed * item;
 
-        sum += dist;
+        sum += simularity;
     }
 
     print("{}\n", .{sum});
