@@ -181,61 +181,65 @@ fn isXmas(
     }
 }
 
-test {
-    const testing = std.testing;
-
-    var lines = try LinesList.initCapacity(testing.allocator, 4);
-    defer {
-        for (lines.items) |item| {
-            item.deinit();
-        }
-
-        lines.deinit();
+fn isXMasTwo(lines: *LinesList, pos: Pos) bool {
+    if (lines.items[pos.y].items[pos.x] != 'A') {
+        return false;
     }
 
-    var chars1 = CharList.init(testing.allocator);
-    try chars1.append('S');
-    try chars1.append(' ');
-    try chars1.append(' ');
-    try chars1.append('X');
-    lines.appendAssumeCapacity(chars1);
+    if (@as(i32, @intCast(pos.y)) - 1 < 0) {
+        return false;
+    }
 
-    var chars2 = CharList.init(testing.allocator);
-    try chars2.append(' ');
-    try chars2.append('A');
-    try chars2.append('M');
-    try chars2.append(' ');
-    lines.appendAssumeCapacity(chars2);
+    if (@as(i32, @intCast(pos.x)) - 1 < 0) {
+        return false;
+    }
 
-    var chars3 = CharList.init(testing.allocator);
-    try chars3.append(' ');
-    try chars3.append('A');
-    try chars3.append('M');
-    try chars3.append(' ');
-    lines.appendAssumeCapacity(chars3);
+    if (pos.y + 1 >= lines.items.len) {
+        return false;
+    }
 
-    var chars4 = CharList.init(testing.allocator);
-    try chars4.append(' ');
-    try chars4.append(' ');
-    try chars4.append(' ');
-    try chars4.append('X');
-    lines.appendAssumeCapacity(chars4);
+    if (pos.x + 1 >= lines.items[pos.y + 1].items.len) {
+        return false;
+    }
 
-    try testing.expect(
-        isXmas(&lines, .{ .x = 3, .y = 3 }, 0, .UpLeft) == false,
-    );
+    const TLChar = lines.items[pos.y - 1].items[pos.x - 1];
+    const TRChar = lines.items[pos.y - 1].items[pos.x + 1];
+    const BLChar = lines.items[pos.y + 1].items[pos.x - 1];
+    const BRChar = lines.items[pos.y + 1].items[pos.x + 1];
+
+    if (TLChar == 'M' and BRChar == 'S') {
+        if (TRChar == 'S' and BLChar == 'M') {
+            return true;
+        }
+        if (TRChar == 'M' and BLChar == 'S') {
+            return true;
+        }
+    }
+
+    if (TLChar == 'S' and BRChar == 'M') {
+        if (TRChar == 'S' and BLChar == 'M') {
+            return true;
+        }
+        if (TRChar == 'M' and BLChar == 'S') {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 fn countXmas(lines: *LinesList, pos: Pos) u32 {
-    var sum: u32 = 0;
+    return if (isXMasTwo(lines, pos)) 1 else 0;
 
-    inline for (std.meta.fields(Dir)) |f| {
-        if (isXmas(lines, pos, 0, @enumFromInt(f.value))) {
-            sum += 1;
-        }
-    }
-
-    return sum;
+    // var sum: u32 = 0;
+    //
+    // inline for (std.meta.fields(Dir)) |f| {
+    //     if (isXmas(lines, pos, 0, @enumFromInt(f.value))) {
+    //         sum += 1;
+    //     }
+    // }
+    //
+    // return sum;
 }
 
 pub fn main() !void {
@@ -244,16 +248,16 @@ pub fn main() !void {
     defer _ = gpa.deinit();
 
     // const input =
-    //     \\MMMSXXMASM
-    //     \\MSAMXMSMSA
-    //     \\AMXSXMAAMM
-    //     \\MSAMASMSMX
-    //     \\XMASAMXAMM
-    //     \\XXAMMXXAMA
-    //     \\SMSMSASXSS
-    //     \\SAXAMASAAA
-    //     \\MAMMMXMMMM
-    //     \\MXMXAXMASX
+    //     \\.M.S......
+    //     \\..A..MSMS.
+    //     \\.M.S.MAA..
+    //     \\..A.ASMSM.
+    //     \\.M.S.M....
+    //     \\..........
+    //     \\S.S.S.S.S.
+    //     \\.A.A.A.A..
+    //     \\M.M.M.M.M.
+    //     \\..........
     // ;
 
     const file = try std.fs.cwd().openFile("input", .{});
