@@ -3,24 +3,15 @@ const std = @import("std");
 const string = []const u8;
 const print = std.debug.print;
 const Rules = std.AutoHashMap(u16, []u16);
+const Updates = std.ArrayList(u16);
 
-fn contains(comptime T: type, arr: []T, chunk: T) bool {
-    for (arr) |item| {
-        if (item == chunk) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-fn isInOrder(updates: []u16, rules: *Rules) bool {
-    for (updates, 0..) |update, i| {
+fn isInOrder(updates: *[]u16, rules: *Rules) bool {
+    for (updates.*, 0..) |update, i| {
         const maybeRule = rules.get(update);
 
         if (maybeRule) |toBeAfterKey| {
             for (toBeAfterKey) |rule| {
-                const ruleKeyInArray = std.mem.indexOfScalar(u16, updates, rule);
+                const ruleKeyInArray = std.mem.indexOfScalar(u16, updates.*, rule);
 
                 if (ruleKeyInArray != null and ruleKeyInArray.? < i) {
                     return false;
@@ -32,6 +23,38 @@ fn isInOrder(updates: []u16, rules: *Rules) bool {
     }
 
     return true;
+}
+
+fn orderItems(updates: *[]u16, rules: *Rules) void {
+    while (true) {
+        for (updates.*, 0..) |item, i| {
+            const maybeRule = rules.get(item);
+
+            if (maybeRule == null) {
+                continue;
+            }
+
+            const toBeAfterUpdate = maybeRule.?;
+            var lowestAfterIdx = updates.len;
+            for (toBeAfterUpdate) |after| {
+                const idx = std.mem.indexOfScalar(u16, updates.*, after);
+
+                if (idx != null and idx.? < lowestAfterIdx) {
+                    lowestAfterIdx = idx.?;
+                }
+            }
+
+            if (i > lowestAfterIdx) {
+                const temp = updates.*[lowestAfterIdx];
+                updates.*[lowestAfterIdx] = item;
+                updates.*[i] = temp;
+            }
+        }
+
+        if (isInOrder(updates, rules)) {
+            break;
+        }
+    }
 }
 
 pub fn main() !void {
@@ -89,6 +112,7 @@ pub fn main() !void {
     var parsedRules = false;
     var lineIter = std.mem.splitSequence(u8, input, "\n");
     var sum: u32 = 0;
+    var sum2: u32 = 0;
     while (lineIter.next()) |line| {
         if (line.len == 0) {
             parsedRules = true;
@@ -114,7 +138,7 @@ pub fn main() !void {
             }
         } else {
             const numberOfItems = std.mem.count(u8, line, ",") + 1;
-            var items = try std.ArrayList(u16).initCapacity(alloc, numberOfItems);
+            var items = try Updates.initCapacity(alloc, numberOfItems);
             defer items.deinit();
 
             var itemIter = std.mem.splitSequence(u8, line, ",");
@@ -124,12 +148,18 @@ pub fn main() !void {
                 );
             }
 
-            if (isInOrder(items.items, &rules)) {
+            if (isInOrder(&items.items, &rules)) {
                 const middleItem = items.items[items.items.len / 2];
                 sum += middleItem;
+            } else {
+                orderItems(&items.items, &rules);
+
+                const middleItem = items.items[items.items.len / 2];
+                sum2 += middleItem;
             }
         }
     }
 
     print("sum {}\n", .{sum});
+    print("sum2 {}\n", .{sum2});
 }
