@@ -88,6 +88,74 @@ fn walk(alloc: Alloc, city: *City, guard: *Guard, viewed: *Viewed) void {
     walk(alloc, city, guard, viewed);
 }
 
+fn containsSameGuardPosAndDir(list: []*Guard, guard: Guard) bool {
+    for (list) |item| {
+        if (item.x == guard.x and item.y == guard.y and item.dir == guard.dir) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+fn isLooped(alloc: Alloc, city: City, g: Guard, viewed: *std.ArrayList(*Guard)) bool {
+    var guard = g;
+    const oldGuard = g;
+
+    if (containsSameGuardPosAndDir(viewed.items, oldGuard)) {
+        return true;
+    } else {
+        const guardCopy = alloc.create(Guard) catch unreachable;
+        viewed.append(guardCopy) catch unreachable;
+
+        guardCopy.*.x = oldGuard.x;
+        guardCopy.*.y = oldGuard.y;
+        guardCopy.*.dir = oldGuard.dir;
+    }
+
+    switch (guard.dir) {
+        .Up => {
+            if (@as(i16, @intCast(guard.y)) - 1 < 0) {
+                return false;
+            }
+
+            guard.y -= 1;
+        },
+
+        .Right => {
+            if (guard.x + 1 > city.items[guard.y].items.len - 1) {
+                return false;
+            }
+
+            guard.x += 1;
+        },
+
+        .Bottom => {
+            if (guard.y + 1 > city.items.len - 1) {
+                return false;
+            }
+
+            guard.y += 1;
+        },
+
+        .Left => {
+            if (@as(i16, @intCast(guard.x)) - 1 < 0) {
+                return false;
+            }
+
+            guard.x -= 1;
+        },
+    }
+
+    if (city.items[guard.y].items[guard.x] == .Obstacle) {
+        guard.dir = getNextDir(guard.dir);
+        guard.x = oldGuard.x;
+        guard.y = oldGuard.y;
+    }
+
+    return isLooped(alloc, city, guard, viewed);
+}
+
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const alloc = gpa.allocator();
@@ -122,11 +190,11 @@ pub fn main() !void {
     }
 
     var guard: Guard = undefined;
-    var y: u16 = 0;
+    var lineY: u16 = 0;
 
     var linesIter = std.mem.splitScalar(u8, input, '\n');
 
-    while (linesIter.next()) |line| : (y += 1) {
+    while (linesIter.next()) |line| : (lineY += 1) {
         if (line.len == 0) {
             continue;
         }
@@ -139,7 +207,7 @@ pub fn main() !void {
                 '#' => lineArr.appendAssumeCapacity(.Obstacle),
                 '^' => {
                     lineArr.appendAssumeCapacity(.Plain);
-                    guard = .{ .x = @intCast(x), .y = y, .dir = .Up };
+                    guard = .{ .x = @intCast(x), .y = lineY, .dir = .Up };
                 },
                 else => @panic("unknown symbol"),
             }
@@ -158,7 +226,54 @@ pub fn main() !void {
         viewed.deinit();
     }
 
+    const oldGuard = guard;
     walk(alloc, &city, &guard, &viewed);
 
-    std.debug.print("{}\n", .{viewed.count()});
+    var sum2: u16 = 0;
+
+    var viewedIter = viewed.keyIterator();
+    while (viewedIter.next()) |keyPtr| {
+        var mx: ?u16 = null;
+        var my: ?u16 = null;
+
+        var numIter = std.mem.splitScalar(u8, keyPtr.*, ',');
+        while (numIter.next()) |numStr| {
+            const num = try std.fmt.parseInt(u8, numStr, 10);
+
+            if (mx == null) {
+                mx = num;
+            } else if (my == null) {
+                my = num;
+            }
+        }
+
+        const x = mx.?;
+        const y = my.?;
+
+        if (oldGuard.x == x and oldGuard.y == y) {
+            continue;
+        }
+
+        const oldOldGurd = oldGuard;
+        const temp = city.items[y].items[x];
+
+        city.items[y].items[x] = .Obstacle;
+
+        var visited = std.ArrayList(*Guard).init(alloc);
+        defer {
+            for (visited.items) |item| {
+                alloc.destroy(item);
+            }
+
+            visited.deinit();
+        }
+
+        if (isLooped(alloc, city, oldOldGurd, &visited)) {
+            sum2 += 1;
+        }
+
+        city.items[y].items[x] = temp;
+    }
+
+    std.debug.print("part 2 - {}\n", .{sum2});
 }
