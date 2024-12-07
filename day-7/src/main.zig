@@ -2,53 +2,37 @@ const std = @import("std");
 
 const print = std.debug.print;
 
-const Operator = enum {
-    Plus,
-    Mult,
-};
-
+var buff: [1000]u8 = undefined;
 fn isCalculatable(
     res: u64,
     current: u64,
     numbers: []u64,
-    operators: []Operator,
     currentOperatorIdx: u8,
-    depth: u16,
 ) bool {
-    if (numbers.len == 0 or operators.len == 0) {
-        return false;
+    if (numbers.len == 0) {
+        return current == res;
     }
 
     const nextInt = numbers[0];
-    var currentRes = current;
 
-    // for (0..depth) |_| {
-    //     print("  ", .{});
-    // }
-    // print("{} {} {any} {any}\n", .{
-    //     current,
-    //     nextInt,
-    //     numbers,
-    //     operators[currentOperatorIdx],
-    // });
+    const currentRes = switch (currentOperatorIdx) {
+        0 => current + nextInt,
+        1 => current * nextInt,
+        2 => a: {
+            const concatStr = std.fmt.bufPrint(&buff, "{}{}", .{ current, nextInt }) catch unreachable;
 
-    switch (operators[currentOperatorIdx]) {
-        .Plus => currentRes += nextInt,
-        .Mult => currentRes *= nextInt,
-    }
+            break :a std.fmt.parseInt(u64, concatStr, 10) catch unreachable;
+        },
 
-    if (currentRes == res) {
-        return true;
-    }
+        else => @panic("unknown operator"),
+    };
 
-    for (0..operators.len) |i| {
+    for (0..3) |i| {
         if (isCalculatable(
             res,
             currentRes,
             numbers[1..],
-            operators,
             @intCast(i),
-            depth + 1,
         )) {
             return true;
         }
@@ -76,18 +60,11 @@ pub fn main() !void {
 
     const file = try std.fs.cwd().openFile("input", .{});
     defer file.close();
-
     const input = try file.readToEndAlloc(alloc, 32000);
     defer alloc.free(input);
 
     var numbers = std.ArrayList(u64).init(alloc);
     defer numbers.deinit();
-
-    var operators = std.ArrayList(Operator).initCapacity(alloc, 2) catch unreachable;
-    defer operators.deinit();
-
-    operators.appendAssumeCapacity(.Plus);
-    operators.appendAssumeCapacity(.Mult);
 
     var sum1: u64 = 0;
 
@@ -114,13 +91,11 @@ pub fn main() !void {
             res,
             0,
             numbers.items,
-            operators.items,
-            0,
             0,
         )) {
             sum1 += res;
         }
     }
 
-    print("1 part - {}\n", .{sum1});
+    print("2 part - {}\n", .{sum1});
 }
