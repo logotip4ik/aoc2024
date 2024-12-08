@@ -7,22 +7,20 @@ const Point = struct {
     y: u16,
 };
 
-fn appendIfNotSeen(list: *std.ArrayList(*Point), point: *Point) bool {
+fn appendIfNotSeen(list: *std.ArrayList(*Point), point: *Point) void {
     for (list.items) |item| {
         if (item.x == point.x and item.y == point.y) {
-            return false;
+            return;
         }
     }
 
     list.append(point) catch unreachable;
-
-    return true;
 }
 
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    const alloc = gpa.allocator();
-    defer _ = gpa.deinit();
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    const alloc = arena.allocator();
+    defer arena.deinit();
 
     // const input =
     //     \\............
@@ -50,18 +48,6 @@ pub fn main() !void {
     };
 
     var pointsMap = std.AutoHashMap(u8, []*Point).init(alloc);
-    defer {
-        var valueIter = pointsMap.valueIterator();
-        while (valueIter.next()) |valuePtr| {
-            for (valuePtr.*) |point| {
-                alloc.destroy(point);
-            }
-
-            alloc.free(valuePtr.*);
-        }
-
-        pointsMap.deinit();
-    }
 
     var lineIter = std.mem.splitScalar(u8, input, '\n');
     var lineY: u16 = 0;
@@ -100,13 +86,6 @@ pub fn main() !void {
     }
 
     var pointsArr = std.ArrayList(*Point).init(alloc);
-    defer {
-        for (pointsArr.items) |point| {
-            alloc.destroy(point);
-        }
-
-        defer pointsArr.deinit();
-    }
 
     var pointsIter = pointsMap.valueIterator();
     while (pointsIter.next()) |pointsPtr| {
@@ -118,32 +97,37 @@ pub fn main() !void {
                     continue;
                 }
 
+                appendIfNotSeen(&pointsArr, alignPoint);
+                appendIfNotSeen(&pointsArr, point);
+
                 const xOffset = @as(i32, @intCast(point.x)) - @as(i32, @intCast(alignPoint.x));
                 const yOffset = @as(i32, @intCast(point.y)) - @as(i32, @intCast(alignPoint.y));
 
-                const anitpointX = @as(i32, @intCast(point.x)) + xOffset;
-                const anitpointY = @as(i32, @intCast(point.y)) + yOffset;
+                var prevPoint = point;
 
-                if (anitpointX < 0 or anitpointY < 0) {
-                    continue;
-                }
+                while (true) {
+                    const anitpointX = @as(i32, @intCast(prevPoint.x)) + xOffset;
+                    const anitpointY = @as(i32, @intCast(prevPoint.y)) + yOffset;
 
-                if (anitpointX > bounds.x - 1 or anitpointY > bounds.y - 1) {
-                    continue;
-                }
+                    if (anitpointX < 0 or anitpointY < 0) {
+                        break;
+                    }
 
-                const antipoint = alloc.create(Point) catch unreachable;
-                antipoint.*.x = @intCast(anitpointX);
-                antipoint.*.y = @intCast(anitpointY);
+                    if (anitpointX > bounds.x - 1 or anitpointY > bounds.y - 1) {
+                        break;
+                    }
 
-                const appended = appendIfNotSeen(&pointsArr, antipoint);
+                    const antipoint = alloc.create(Point) catch unreachable;
+                    antipoint.*.x = @intCast(anitpointX);
+                    antipoint.*.y = @intCast(anitpointY);
 
-                if (!appended) {
-                    alloc.destroy(antipoint);
+                    appendIfNotSeen(&pointsArr, antipoint);
+
+                    prevPoint = antipoint;
                 }
             }
         }
     }
 
-    print("1 part - {}\n", .{pointsArr.items.len});
+    print("2 part - {}\n", .{pointsArr.items.len});
 }
