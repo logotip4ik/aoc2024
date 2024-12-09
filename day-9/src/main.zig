@@ -4,35 +4,23 @@ const print = std.debug.print;
 
 const Block = struct {
     value: ?u64,
+    size: u64,
 };
-
-var EmptyBlock: Block = .{ .value = null };
 
 const Disk = std.ArrayList(*Block);
 
 fn printDisk(disk: *Disk) void {
     for (disk.items) |block| {
-        if (block.value) |blockId| {
-            print("{}", .{blockId});
-        } else {
-            print(".", .{});
+        for (0..block.size) |_| {
+            if (block.value) |blockId| {
+                print("{}", .{blockId});
+            } else {
+                print(".", .{});
+            }
         }
     }
+
     print("\n", .{});
-}
-
-fn findNextEmptySpot(disk: *Disk, start: usize) usize {
-    for (start..disk.items.len) |i| {
-        const block = disk.items[i];
-
-        if (block.value == null) {
-            return i;
-        }
-    }
-
-    std.debug.assert(false);
-
-    return 0;
 }
 
 pub fn main() !void {
@@ -41,6 +29,7 @@ pub fn main() !void {
     defer _ = gpa.deinit();
 
     // const input = "2333133121414131402";
+
     const file = try std.fs.cwd().openFile("input", .{});
     defer file.close();
     const input = try file.readToEndAlloc(alloc, 32000);
@@ -67,13 +56,11 @@ pub fn main() !void {
 
         const number = c - 48;
 
-        for (0..number) |_| {
-            const b = alloc.create(Block) catch unreachable;
+        const b = alloc.create(Block) catch unreachable;
+        b.*.value = if (isFileBlock) fileBlockId else null;
+        b.*.size = number;
 
-            b.*.value = if (isFileBlock) fileBlockId else null;
-
-            try disk.append(b);
-        }
+        disk.append(b) catch unreachable;
 
         if (isFileBlock) {
             fileBlockId += 1;
@@ -82,39 +69,51 @@ pub fn main() !void {
         isFileBlock = !isFileBlock;
     }
 
-    print("{d}\n", .{disk.items.len});
-
-    var prevEmptySpot: usize = 0;
     var reversedI: usize = disk.items.len;
     while (reversedI > 0) {
         reversedI -= 1;
 
-        const blockPtr = disk.items[reversedI];
-        if (blockPtr.value) |_| {
-            const emptySpot = findNextEmptySpot(&disk, prevEmptySpot);
+        const lastChunk = disk.items[reversedI];
+        if (lastChunk.value == null) {
+            continue;
+        }
 
-            if (reversedI + 1 == emptySpot) {
+        for (disk.items[0..reversedI], 0..) |block, i| {
+            if (block.value == null and block.size >= lastChunk.size) {
+                if (block.size - lastChunk.size == 0) {
+                    const temp = disk.items[i];
+                    disk.items[i] = lastChunk;
+                    disk.items[reversedI] = temp;
+                } else {
+                    block.*.size -= lastChunk.size;
+
+                    const empty = alloc.create(Block) catch unreachable;
+                    empty.*.size = lastChunk.size;
+                    empty.*.value = null;
+
+                    disk.items[reversedI] = empty;
+                    disk.insert(i, lastChunk) catch unreachable;
+                }
+
                 break;
             }
-
-            prevEmptySpot = emptySpot;
-
-            const emptyBlock = disk.items[emptySpot];
-            disk.items[emptySpot] = blockPtr;
-            disk.items[reversedI] = emptyBlock;
         }
 
         // printDisk(&disk);
     }
 
-    var sum1: u64 = 0;
-    for (disk.items, 0..) |block, index| {
+    var sum: u64 = 0;
+    var i: usize = 0;
+    for (disk.items) |block| {
         if (block.value) |blockId| {
-            sum1 += index * blockId;
+            const loopEnd = i + block.size;
+            while (i < loopEnd) : (i += 1) {
+                sum += i * blockId;
+            }
         } else {
-            break;
+            i += block.size;
         }
     }
 
-    print("1 part - {}\n", .{sum1});
+    print("{}\n", .{sum});
 }
