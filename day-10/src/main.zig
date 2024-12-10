@@ -59,15 +59,15 @@ fn walk(alloc: Alloc, map: *Map, path: *Path, start: *Start, seenTails: *Path) v
     const currentHeight = map.items[currentPos.y].items[currentPos.x];
 
     if (currentHeight == 9) {
-        if (!beenAt(seenTails, currentPos)) {
-            start.*.score += 1;
+        // if (!beenAt(seenTails, currentPos)) {
+        start.*.score += 1;
 
-            const tail = alloc.create(Pos) catch unreachable;
-            tail.*.x = currentPos.x;
-            tail.*.y = currentPos.y;
+        const tail = alloc.create(Pos) catch unreachable;
+        tail.*.x = currentPos.x;
+        tail.*.y = currentPos.y;
 
-            seenTails.append(tail) catch unreachable;
-        }
+        seenTails.append(tail) catch unreachable;
+        // }
 
         return;
     }
