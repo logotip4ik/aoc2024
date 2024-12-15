@@ -1,17 +1,17 @@
 const std = @import("std");
 
 const Pos = struct {
-    x: u32,
-    y: u32,
+    x: u64,
+    y: u64,
 };
 
-fn doTheThing(a: u32, b: u32, c: u32, d: u32) f32 {
-    const firstDiag: f32 = @floatFromInt(a * b);
-    const secondDiag: f32 = @floatFromInt(c * d);
+fn doTheThing(a: u64, b: u64, c: u64, d: u64) f64 {
+    const firstDiag: f64 = @floatFromInt(a * b);
+    const secondDiag: f64 = @floatFromInt(c * d);
     return firstDiag - secondDiag;
 }
 
-fn hasDigitsAfterComma(x: f32) bool {
+fn hasDigitsAfterComma(x: f64) bool {
     return @floor(x) != x;
 }
 
@@ -41,7 +41,7 @@ pub fn main() !void {
     const inputLen = try file.readAll(&buff);
     const input = buff[0..inputLen];
 
-    var tokens: u32 = 0;
+    var tokens: u64 = 0;
 
     var machineIter = std.mem.splitSequence(u8, input, "\n\n");
     while (machineIter.next()) |machineString| {
@@ -56,34 +56,30 @@ pub fn main() !void {
         const prizeString = lineIter.next().?;
 
         const buttonAPos: Pos = .{
-            .x = std.fmt.parseUnsigned(u32, buttonAString[12..14], 10) catch unreachable,
-            .y = std.fmt.parseUnsigned(u32, buttonAString[18..20], 10) catch unreachable,
+            .x = std.fmt.parseUnsigned(u64, buttonAString[12..14], 10) catch unreachable,
+            .y = std.fmt.parseUnsigned(u64, buttonAString[18..20], 10) catch unreachable,
         };
         const buttonBPos: Pos = .{
-            .x = std.fmt.parseUnsigned(u32, buttonBString[12..14], 10) catch unreachable,
-            .y = std.fmt.parseUnsigned(u32, buttonBString[18..20], 10) catch unreachable,
+            .x = std.fmt.parseUnsigned(u64, buttonBString[12..14], 10) catch unreachable,
+            .y = std.fmt.parseUnsigned(u64, buttonBString[18..20], 10) catch unreachable,
         };
 
-        std.debug.print("str - {s}\n", .{prizeString});
         var prizeIter = std.mem.splitSequence(u8, prizeString[7..], ", ");
         const prizeXString = prizeIter.next().?[2..];
         const prizeYString = prizeIter.next().?[2..];
 
-        const prizePos: Pos = .{
-            .x = std.fmt.parseUnsigned(u32, prizeXString, 10) catch unreachable,
-            .y = std.fmt.parseUnsigned(u32, prizeYString, 10) catch unreachable,
+        var prizePos: Pos = .{
+            .x = std.fmt.parseUnsigned(u64, prizeXString, 10) catch unreachable,
+            .y = std.fmt.parseUnsigned(u64, prizeYString, 10) catch unreachable,
         };
 
-        // const firstDiag: f32 = @floatFromInt(buttonAPos.x * buttonBPos.y);
-        // const secondDiag: f32 = @floatFromInt(buttonAPos.y * buttonBPos.x);
-        // const D: f32 = firstDiag - secondDiag;
+        prizePos.x += 10000000000000;
+        prizePos.y += 10000000000000;
 
         const D = doTheThing(buttonAPos.x, buttonBPos.y, buttonAPos.y, buttonBPos.x);
 
         std.debug.assert(D != 0.0);
 
-        // const D1: f32 = @floatFromInt(prizePos.x * buttonBPos.y - buttonBPos.x * prizePos.y);
-        // const D2: f32 = @floatFromInt(prizePos.y * buttonAPos.x - buttonAPos.y * prizePos.x);
         const D1 = doTheThing(prizePos.x, buttonBPos.y, prizePos.y, buttonBPos.x);
         const D2 = doTheThing(prizePos.y, buttonAPos.x, prizePos.x, buttonAPos.y);
 
@@ -92,22 +88,10 @@ pub fn main() !void {
         const y = D2 / D;
 
         if (hasDigitsAfterComma(x) or hasDigitsAfterComma(y)) {
-            std.debug.print("no options for prize winning in\n{}\n{}\n{}\n\n", .{
-                buttonAPos,
-                buttonBPos,
-                prizePos,
-            });
             continue;
         }
 
-        if (x > 100 or y > 100) {
-            std.debug.print("too many keypresses\n", .{});
-            continue;
-        }
-
-        tokens += @as(u32, @intFromFloat(x)) * 3 + @as(u32, @intFromFloat(y));
-
-        // std.debug.print("{}\n{}\n{}\n\n", .{ buttonAPos, buttonBPos, prizePos });
+        tokens += @as(u64, @intFromFloat(x)) * 3 + @as(u64, @intFromFloat(y));
     }
 
     std.debug.print("sum = {}\n", .{tokens});
