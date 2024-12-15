@@ -11,32 +11,6 @@ const PosWithVelocity = struct {
 const ROOM_WIDTH = 101;
 const ROOM_HEIGHT = 103;
 
-fn simulate(robots: *[]PosWithVelocity) void {
-    for (robots.*) |*robot| {
-        var newX: i16 = @as(i16, @intCast(robot.x)) + robot.vx;
-        var newY: i16 = @as(i16, @intCast(robot.y)) + robot.vy;
-
-        if (newX < 0) {
-            newX = ROOM_WIDTH + newX;
-        }
-
-        if (newY < 0) {
-            newY = ROOM_HEIGHT + newY;
-        }
-
-        if (newX > ROOM_WIDTH - 1) {
-            newX = @rem(newX, ROOM_WIDTH);
-        }
-
-        if (newY > ROOM_HEIGHT - 1) {
-            newY = @rem(newY, ROOM_HEIGHT);
-        }
-
-        robot.x = @intCast(newX);
-        robot.y = @intCast(newY);
-    }
-}
-
 fn apply(robot: *PosWithVelocity, times: u32) void {
     var newX = @as(i64, @intCast(robot.x)) + @as(i64, @intCast(robot.vx)) * @as(i64, @intCast(times));
     var newY = @as(i64, @intCast(robot.y)) + @as(i64, @intCast(robot.vy)) * @as(i64, @intCast(times));
@@ -126,10 +100,6 @@ pub fn main() !void {
 
     const robots = robotBuff[0..inserted];
 
-    for (robots) |*robot| {
-        apply(robot, 100);
-    }
-
     var q0: u32 = 0;
     var q1: u32 = 0;
     var q2: u32 = 0;
@@ -138,36 +108,49 @@ pub fn main() !void {
     const qX = @divFloor(ROOM_WIDTH, 2);
     const qY = @divFloor(ROOM_HEIGHT, 2);
 
-    std.debug.print("center lines: {}, {}\n", .{ qX, qY });
-
-    for (robots) |robot| {
-        if (robot.x < qX and robot.y < qY) {
-            q0 += 1;
-            continue;
+    var i: u32 = 0;
+    while (true) : (i += 1) {
+        for (robots) |*robot| {
+            apply(robot, 1);
         }
 
-        if (robot.x > qX and robot.y < qY) {
-            q1 += 1;
-            continue;
+        for (robots) |robot| {
+            if (robot.x < qX and robot.y < qY) {
+                q0 += 1;
+                continue;
+            }
+
+            if (robot.x > qX and robot.y < qY) {
+                q1 += 1;
+                continue;
+            }
+
+            if (robot.x < qX and robot.y > qY) {
+                q2 += 1;
+                continue;
+            }
+
+            if (robot.x > qX and robot.y > qY) {
+                q3 += 1;
+                continue;
+            }
         }
 
-        if (robot.x < qX and robot.y > qY) {
-            q2 += 1;
-            continue;
+        const threshold = 278;
+        if (q0 > threshold or q1 > threshold or q2 > threshold or q3 > threshold) {
+            break;
         }
 
-        if (robot.x > qX and robot.y > qY) {
-            q3 += 1;
-            continue;
+        q0 = 0;
+        q1 = 0;
+        q2 = 0;
+        q3 = 0;
+
+        if (i > 9999999) {
+            std.debug.assert(false);
         }
     }
 
-    std.debug.print("sum: {} * {} * {} * {} = {}\n", .{
-        q0,
-        q1,
-        q2,
-        q3,
-
-        q0 * q1 * q2 * q3,
-    });
+    std.debug.print("i - {}\n", .{i + 1});
+    printRobots(&robots);
 }
