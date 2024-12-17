@@ -1,5 +1,7 @@
 const std = @import("std");
 
+const Alloc = std.mem.Allocator;
+
 const Move = enum {
     Up,
     Right,
@@ -9,7 +11,8 @@ const Move = enum {
 
 const Spot = enum {
     Empty,
-    Box,
+    BoxL,
+    BoxR,
     Wall,
 };
 
@@ -18,6 +21,13 @@ const Pos = struct {
     y: u16,
 };
 
+const PosWithSpot = struct {
+    x: u16,
+    y: u16,
+    value: Spot,
+};
+
+const Positions = std.ArrayList(*PosWithSpot);
 const Row = std.ArrayList(Spot);
 const Map = std.ArrayList(Row);
 
@@ -33,15 +43,37 @@ fn printMoves(moves: *const []Move) void {
     std.debug.print("\n", .{});
 }
 
+fn includesPos(positions: *const Positions, pos: *const PosWithSpot) bool {
+    for (positions.items) |item| {
+        if (item.x == pos.x and item.y == pos.y) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 fn printMap(map: *const Map, robotPos: *const Pos) void {
+    std.debug.print(" ", .{});
+    for (0..map.items[0].items.len) |i| {
+        if (i % 2 == 0) {
+            std.debug.print("{} ", .{i});
+        }
+    }
+    std.debug.print("\n", .{});
+
     for (map.items, 0..) |row, y| {
+        std.debug.print("{}", .{y});
+
         for (row.items, 0..) |s, x| {
             if (x == robotPos.x and y == robotPos.y) {
                 std.debug.print("@", .{});
             } else if (s == .Empty) {
                 std.debug.print(".", .{});
-            } else if (s == .Box) {
-                std.debug.print("O", .{});
+            } else if (s == .BoxL) {
+                std.debug.print("[", .{});
+            } else if (s == .BoxR) {
+                std.debug.print("]", .{});
             } else if (s == .Wall) {
                 std.debug.print("#", .{});
             }
@@ -49,66 +81,259 @@ fn printMap(map: *const Map, robotPos: *const Pos) void {
 
         std.debug.print("\n", .{});
     }
+
+    std.debug.print("  ", .{});
+    for (0..map.items[0].items.len) |i| {
+        if (i % 2 != 0) {
+            std.debug.print("{} ", .{i});
+        }
+    }
+    std.debug.print("\n", .{});
 }
 
-fn moveRobot(map: *Map, robot: *Pos, move: Move) void {
-    const p = switch (move) {
+fn makeNewPos(pos: *const Pos, move: Move) Pos {
+    return switch (move) {
         .Up => Pos{
-            .x = robot.x,
-            .y = robot.y - 1,
+            .x = pos.x,
+            .y = pos.y - 1,
         },
         .Right => Pos{
-            .x = robot.x + 1,
-            .y = robot.y,
+            .x = pos.x + 1,
+            .y = pos.y,
         },
         .Bottom => Pos{
-            .x = robot.x,
-            .y = robot.y + 1,
+            .x = pos.x,
+            .y = pos.y + 1,
         },
         .Left => Pos{
-            .x = robot.x - 1,
-            .y = robot.y,
+            .x = pos.x - 1,
+            .y = pos.y,
         },
     };
+}
+
+fn canMove(map: *const Map, pos: *const Pos, move: Move) bool {
+    const p = makeNewPos(pos, move);
 
     const item = map.items[p.y].items[p.x];
-    // std.debug.print("item - {any}\n", .{item});
-    const newRobotPos = switch (item) {
-        .Empty => Pos{
-            .x = p.x,
-            .y = p.y,
-            // newRobotPos.x = p.x;
-            // newRobotPos.y = p.y;
-        },
-        .Box => blk: {
-            var pCopy = Pos{ .x = p.x, .y = p.y };
+    return item == .BoxL or item == .BoxR or item == .Empty;
+}
 
-            // const tempSpot = map.items[p.y].items[p.x];
-            moveRobot(map, &pCopy, move);
-            map.items[p.y].items[p.x] = .Empty;
-            map.items[pCopy.y].items[pCopy.x] = .Box;
+// fn moveVerticaly(map: *Map, pos: *Pos, move: Move, toMove: *Positions) bool {
+// }
 
-            if (map.items[p.y].items[p.x] == .Empty) {
-                break :blk Pos{
-                    .x = p.x,
-                    .y = p.y,
-                };
-            }
+fn moveRobot(alloc: *const Alloc, map: *Map, robot: *Pos, move: Move, depth: u32, toMove: *Positions) void {
+    const p = makeNewPos(robot, move);
 
-            break :blk Pos{
+    const item: Spot = map.items[p.y].items[p.x];
+
+    // if (move == .Up) {
+    //     for (0..depth) |_| {
+    //         std.debug.print("  ", .{});
+    //     }
+    //     std.debug.print("item - {any}\n", .{item});
+    // }
+
+    const newRobotPos = switch (move) {
+        .Left, .Right => switch (item) {
+            .Empty => Pos{
+                .x = p.x,
+                .y = p.y,
+            },
+            .Wall => Pos{
                 .x = robot.x,
                 .y = robot.y,
-            };
+            },
+            .BoxL, .BoxR => blk: {
+                var pCopy = Pos{ .x = p.x, .y = p.y };
+                moveRobot(alloc, map, &pCopy, move, depth + 1, toMove);
+
+                if (pCopy.x != p.x or pCopy.y != p.y) {
+                    map.items[p.y].items[p.x] = .Empty;
+                    map.items[pCopy.y].items[pCopy.x] = item;
+                    break :blk Pos{
+                        .x = p.x,
+                        .y = p.y,
+                    };
+                } else {
+                    break :blk Pos{
+                        .x = robot.x,
+                        .y = robot.y,
+                    };
+                }
+            },
         },
-        .Wall => Pos{
-            .x = robot.x,
-            .y = robot.y,
-            // newRobotPos.x = robot.x;
-            // newRobotPos.y = robot.y;
+
+        .Up, .Bottom => switch (item) {
+            .Empty => Pos{
+                .x = p.x,
+                .y = p.y,
+            },
+            .Wall => Pos{
+                .x = robot.x,
+                .y = robot.y,
+            },
+            .BoxR => blk: {
+                var lBoxCopy = Pos{ .x = p.x - 1, .y = p.y };
+                var pCopy = Pos{ .x = p.x, .y = p.y };
+
+                if (!canMove(map, &pCopy, move) or !canMove(map, &lBoxCopy, move)) {
+                    toMove.clearRetainingCapacity();
+                    break :blk Pos{
+                        .x = robot.x,
+                        .y = robot.y,
+                    };
+                }
+
+                moveRobot(alloc, map, &pCopy, move, depth + 1, toMove);
+
+                if (pCopy.x != p.x or pCopy.y != p.y) {
+                    if (lBoxCopy.x == robot.x) {
+                        break :blk Pos{
+                            .x = p.x,
+                            .y = p.y,
+                        };
+                    }
+
+                    moveRobot(alloc, map, &lBoxCopy, move, depth, toMove);
+                    if (lBoxCopy.y == p.y) {
+                        toMove.clearRetainingCapacity();
+                        break :blk Pos{
+                            .x = robot.x,
+                            .y = robot.y,
+                        };
+                    }
+
+                    {
+                        const point = alloc.create(PosWithSpot) catch unreachable;
+                        point.x = p.x;
+                        point.y = p.y;
+                        point.value = .BoxR;
+                        if (!includesPos(toMove, point)) {
+                            toMove.append(point) catch unreachable;
+                        }
+                    }
+
+                    // map.items[p.y].items[p.x] = .Empty;
+                    // map.items[pCopy.y].items[pCopy.x] = .BoxR;
+
+                    {
+                        const point = alloc.create(PosWithSpot) catch unreachable;
+                        point.x = p.x - 1;
+                        point.y = p.y;
+                        point.value = .BoxL;
+                        if (!includesPos(toMove, point)) {
+                            toMove.append(point) catch unreachable;
+                        }
+                    }
+
+                    // map.items[p.y].items[p.x - 1] = .Empty;
+                    // map.items[lBoxCopy.y].items[lBoxCopy.x] = .BoxL;
+
+                    break :blk Pos{
+                        .x = p.x,
+                        .y = p.y,
+                    };
+                }
+
+                toMove.clearRetainingCapacity();
+
+                break :blk Pos{
+                    .x = robot.x,
+                    .y = robot.y,
+                };
+            },
+            .BoxL => blk: {
+                var rBoxCopy = Pos{ .x = p.x + 1, .y = p.y };
+                var pCopy = Pos{ .x = p.x, .y = p.y };
+
+                if (!canMove(map, &pCopy, move) or !canMove(map, &rBoxCopy, move)) {
+                    toMove.clearRetainingCapacity();
+                    break :blk Pos{
+                        .x = robot.x,
+                        .y = robot.y,
+                    };
+                }
+
+                moveRobot(alloc, map, &pCopy, move, depth + 1, toMove);
+
+                if (pCopy.x != p.x or pCopy.y != p.y) {
+                    if (rBoxCopy.x == robot.x) {
+                        break :blk Pos{
+                            .x = p.x,
+                            .y = p.y,
+                        };
+                    }
+
+                    moveRobot(alloc, map, &rBoxCopy, move, depth, toMove);
+                    if (rBoxCopy.y == p.y) {
+                        toMove.clearRetainingCapacity();
+                        break :blk Pos{
+                            .x = robot.x,
+                            .y = robot.y,
+                        };
+                    }
+
+                    {
+                        const point = alloc.create(PosWithSpot) catch unreachable;
+                        point.x = p.x;
+                        point.y = p.y;
+                        point.value = .BoxL;
+                        if (!includesPos(toMove, point)) {
+                            toMove.append(point) catch unreachable;
+                        }
+                    }
+
+                    // map.items[p.y].items[p.x] = .Empty;
+                    // map.items[pCopy.y].items[pCopy.x] = .BoxL;
+
+                    {
+                        const point = alloc.create(PosWithSpot) catch unreachable;
+                        point.x = p.x + 1;
+                        point.y = p.y;
+                        point.value = .BoxR;
+                        if (!includesPos(toMove, point)) {
+                            toMove.append(point) catch unreachable;
+                        }
+                    }
+
+                    // map.items[p.y].items[p.x + 1] = .Empty;
+                    // map.items[rBoxCopy.y].items[rBoxCopy.x] = .BoxR;
+
+                    break :blk Pos{
+                        .x = p.x,
+                        .y = p.y,
+                    };
+                }
+
+                toMove.clearRetainingCapacity();
+
+                break :blk Pos{
+                    .x = robot.x,
+                    .y = robot.y,
+                };
+            },
         },
     };
 
-    // std.debug.print("newRobotPos - {any}\n", .{newRobotPos});
+    if (depth == 0 and (move == .Up or move == .Bottom)) {
+        for (toMove.items) |moveItem| {
+            const nextY = if (move == .Bottom) moveItem.y + 1 else moveItem.y - 1;
+            // std.debug.print("{},{} -> {},{}\n", .{ moveItem.x, moveItem.y, moveItem.x, nextY });
+            map.items[moveItem.y].items[moveItem.x] = .Empty;
+            map.items[nextY].items[moveItem.x] = moveItem.value;
+        }
+
+        toMove.clearRetainingCapacity();
+    }
+
+    // if (move == .Up) {
+    //     for (0..depth) |_| {
+    //         std.debug.print("  ", .{});
+    //     }
+    //     std.debug.print("newRobotPos - {any}\n", .{newRobotPos});
+    // }
+
     robot.x = newRobotPos.x;
     robot.y = newRobotPos.y;
 }
@@ -142,6 +367,32 @@ pub fn main() !void {
     //     \\v^^>>><<^^<>>^v^<v^vv<>v^<<>^<^v^v><^<<<><<^<v><v<>vv>>v><v^<vv<>v^<<^
     // ;
 
+    // const input =
+    //     \\#######
+    //     \\#...#.#
+    //     \\#.....#
+    //     \\#..OO@#
+    //     \\#..O..#
+    //     \\#.....#
+    //     \\#######
+    //     \\
+    //     \\<vv<<^^<<^^
+    // ;
+
+    // const input =
+    //     \\#######
+    //     \\#...#.#
+    //     \\#.....#
+    //     \\#.OOO.#
+    //     \\#..OO@#
+    //     \\#..O..#
+    //     \\#.....#
+    //     \\#.....#
+    //     \\#######
+    //     \\
+    //     \\<vv<<^^^
+    // ;
+
     const file = try std.fs.cwd().openFile("input", .{});
     defer file.close();
     const input = try file.readToEndAlloc(alloc, 32000);
@@ -165,21 +416,13 @@ pub fn main() !void {
 
         if (madeMap) {
             for (line) |c| {
-                switch (c) {
-                    '^' => {
-                        movesBuf[insertedMoves] = .Up;
-                    },
-                    '>' => {
-                        movesBuf[insertedMoves] = .Right;
-                    },
-                    'v' => {
-                        movesBuf[insertedMoves] = .Bottom;
-                    },
-                    '<' => {
-                        movesBuf[insertedMoves] = .Left;
-                    },
+                movesBuf[insertedMoves] = switch (c) {
+                    '^' => .Up,
+                    '>' => .Right,
+                    'v' => .Bottom,
+                    '<' => .Left,
                     else => @panic("unknown move"),
-                }
+                };
                 insertedMoves += 1;
             }
         } else {
@@ -189,6 +432,7 @@ pub fn main() !void {
                 switch (c) {
                     '#' => {
                         row.append(.Wall) catch unreachable;
+                        row.append(.Wall) catch unreachable;
                     },
                     '.', '@' => {
                         if (c == '@') {
@@ -197,10 +441,14 @@ pub fn main() !void {
                         }
 
                         row.append(.Empty) catch unreachable;
+                        row.append(.Empty) catch unreachable;
                     },
                     'O' => {
-                        row.append(.Box) catch unreachable;
+                        row.append(.BoxL) catch unreachable;
+                        row.append(.BoxR) catch unreachable;
                     },
+                    '[' => row.append(.BoxL) catch unreachable,
+                    ']' => row.append(.BoxR) catch unreachable,
                     else => @panic("unknown map value"),
                 }
             }
@@ -209,22 +457,30 @@ pub fn main() !void {
         }
     }
 
-    // std.debug.print("{}\n", .{map.items.len});
-
     printMap(&map, &robotPos);
+
+    var toMove = Positions.init(alloc);
+    defer {
+        for (toMove.items) |item| {
+            alloc.destroy(item);
+        }
+        toMove.deinit();
+    }
 
     const moves = movesBuf[0..insertedMoves];
     for (moves) |move| {
-        moveRobot(&map, &robotPos, move);
+        // std.debug.print("\n{any}\n", .{move});
+        moveRobot(&alloc, &map, &robotPos, move, 0, &toMove);
+        // printMap(&map, &robotPos);
     }
 
-    std.debug.print("\n", .{});
-    printMap(&map, &robotPos);
+    // std.debug.print("\n", .{});
+    // printMap(&map, &robotPos);
 
     var sum: u64 = 0;
     for (map.items, 0..) |row, y| {
         for (row.items, 0..) |item, x| {
-            if (item != .Box) {
+            if (item != .BoxL) {
                 continue;
             }
 
